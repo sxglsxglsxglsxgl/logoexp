@@ -396,9 +396,11 @@
   if (!brand) return;
 
   const grid = brand.querySelector('.site-brand__grid');
-  const svgPath = brand.querySelector('.site-brand__svg-path');
+  const svg = brand.querySelector('.site-brand__svg');
+  const svgText = brand.querySelector('.site-brand__svg-text');
+  const brandText = brand.querySelector('.site-brand__text');
 
-  if (!grid || !svgPath) {
+  if (!grid || !svg || !svgText) {
     return;
   }
 
@@ -408,7 +410,7 @@
       : null;
 
   const supportsWebAnimations =
-    typeof grid.animate === 'function' && typeof svgPath.animate === 'function';
+    typeof grid.animate === 'function' && typeof svgText.animate === 'function';
 
   function waitForFonts() {
     if (document.fonts && typeof document.fonts.ready === 'object') {
@@ -430,8 +432,75 @@
     return element.getAnimations();
   }
 
+  function getStrokeWidthValue() {
+    if (!svgText) return 10;
+
+    const strokeWidth = parseFloat(window.getComputedStyle(svgText).strokeWidth || '');
+    if (Number.isFinite(strokeWidth) && strokeWidth > 0) {
+      return strokeWidth;
+    }
+
+    const fallback = parseFloat(window.getComputedStyle(brand).getPropertyValue('--brand-stroke-width') || '');
+    if (Number.isFinite(fallback) && fallback > 0) {
+      return fallback;
+    }
+
+    return 10;
+  }
+
+  function syncSvgTextStyle() {
+    if (!svgText) return;
+
+    const source = brandText || brand;
+    if (source) {
+      const computed = window.getComputedStyle(source);
+      const assignments = [
+        ['fontFamily', computed.fontFamily],
+        ['fontSize', computed.fontSize],
+        ['fontWeight', computed.fontWeight],
+        ['letterSpacing', computed.letterSpacing]
+      ];
+
+      assignments.forEach(([property, value]) => {
+        if (value) {
+          svgText.style[property] = value;
+        }
+      });
+    }
+
+    if (brandText) {
+      svgText.textContent = brandText.textContent || '';
+    }
+  }
+
+  function calibrateSvgTextBounds() {
+    if (!svg || !svgText) return;
+
+    syncSvgTextStyle();
+
+    let bbox;
+
+    try {
+      bbox = svgText.getBBox();
+    } catch (error) {
+      bbox = null;
+    }
+
+    if (!bbox || bbox.width === 0 || bbox.height === 0) {
+      return;
+    }
+
+    const padding = Math.max(getStrokeWidthValue() * 0.75, 2);
+    const minX = bbox.x - padding;
+    const minY = bbox.y - padding;
+    const width = bbox.width + padding * 2;
+    const height = bbox.height + padding * 2;
+
+    svg.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
+  }
+
   function cancelAnimations() {
-    [grid, svgPath].forEach((element) => {
+    [grid, svgText].forEach((element) => {
       getAnimations(element).forEach((animation) => {
         try {
           animation.cancel();
@@ -444,12 +513,14 @@
 
   function applyStaticState() {
     cancelAnimations();
+    syncSvgTextStyle();
+    calibrateSvgTextBounds();
     brand.classList.remove('site-brand--animating');
     brand.classList.add('site-brand--animated');
-    svgPath.style.strokeDasharray = 'none';
-    svgPath.style.strokeDashoffset = '0';
-    svgPath.style.fillOpacity = '1';
-    svgPath.style.strokeOpacity = '0';
+    svgText.style.strokeDasharray = 'none';
+    svgText.style.strokeDashoffset = '0';
+    svgText.style.fillOpacity = '1';
+    svgText.style.strokeOpacity = '0';
     grid.style.opacity = '0';
     grid.style.transform = 'scale(1)';
   }
@@ -461,22 +532,23 @@
     return animation.finished.catch(() => {});
   }
 
-  function getPathLength() {
-    if (!svgPath) {
+  function getStrokeLength() {
+    if (!svgText) {
       return 1;
     }
 
     try {
-      const length = svgPath.getTotalLength();
-      if (!Number.isFinite(length)) {
-        throw new Error('Invalid length');
-      }
-      return Math.max(length, 1);
+      const computedLength = svgText.getComputedTextLength();
+      const bbox = svgText.getBBox();
+      const width = Math.max(bbox.width, 1);
+      const height = Math.max(bbox.height, 1);
+      const perimeter = 2 * (width + height);
+      return Math.max(computedLength * 2.4, perimeter * 1.25, 1);
     } catch (error) {
-      const rect = svgPath.getBoundingClientRect();
+      const rect = brand.getBoundingClientRect();
       const width = rect.width || brand.offsetWidth || 0;
       const height = rect.height || brand.offsetHeight || 0;
-      return Math.max(2 * (width + height), width * 3, 1);
+      return Math.max((width + height) * 3, 1);
     }
   }
 
@@ -486,52 +558,57 @@
       brand.classList.add('site-brand--animating');
       brand.classList.remove('site-brand--animated');
 
-      const length = getPathLength();
-      svgPath.style.strokeDasharray = `${length}`;
-      svgPath.style.strokeDashoffset = `${length}`;
-      svgPath.style.fillOpacity = '0';
-      svgPath.style.strokeOpacity = '1';
+      syncSvgTextStyle();
+
+      const length = getStrokeLength();
+      svgText.style.strokeDasharray = `${length}`;
+      svgText.style.strokeDashoffset = `${length}`;
+      svgText.style.fillOpacity = '0';
+      svgText.style.strokeOpacity = '1';
+
+      grid.style.opacity = '0';
+      grid.style.transform = 'scale(1.04)';
 
       const gridFadeIn = grid.animate(
         [
-          { opacity: 0, transform: 'scale(1.18)' },
-          { opacity: 0.55, transform: 'scale(1)' }
+          { opacity: 0, transform: 'scale(1.04)' },
+          { opacity: 0.42, transform: 'scale(1)' }
         ],
-        { duration: 650, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', fill: 'forwards' }
+        { duration: 520, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
       );
       await whenFinished(gridFadeIn);
 
-      const strokeAnimation = svgPath.animate(
+      const strokeAnimation = svgText.animate(
         [
           { strokeDashoffset: length },
           { strokeDashoffset: 0 }
         ],
-        { duration: 1600, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }
+        { duration: 1400, easing: 'cubic-bezier(0.77, 0, 0.175, 1)', fill: 'forwards' }
       );
       await whenFinished(strokeAnimation);
 
-      const fillAnimation = svgPath.animate(
+      const fillAnimation = svgText.animate(
         [
           { fillOpacity: 0, strokeOpacity: 1 },
           { fillOpacity: 1, strokeOpacity: 0 }
         ],
-        { duration: 750, easing: 'ease-out', fill: 'forwards' }
+        { duration: 640, easing: 'cubic-bezier(0.33, 1, 0.68, 1)', fill: 'forwards' }
       );
-      await whenFinished(fillAnimation);
 
       const gridFadeOut = grid.animate(
         [
-          { opacity: 0.55, transform: 'scale(1)' },
-          { opacity: 0, transform: 'scale(0.94)' }
+          { opacity: 0.42, transform: 'scale(1)' },
+          { opacity: 0, transform: 'scale(0.97)' }
         ],
-        { duration: 800, delay: 150, easing: 'ease-in', fill: 'forwards' }
+        { duration: 600, delay: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
       );
-      await whenFinished(gridFadeOut);
 
-      svgPath.style.strokeDasharray = 'none';
-      svgPath.style.strokeDashoffset = '0';
-      svgPath.style.fillOpacity = '1';
-      svgPath.style.strokeOpacity = '0';
+      await Promise.all([whenFinished(fillAnimation), whenFinished(gridFadeOut)]);
+
+      svgText.style.strokeDasharray = 'none';
+      svgText.style.strokeDashoffset = '0';
+      svgText.style.fillOpacity = '1';
+      svgText.style.strokeOpacity = '0';
       grid.style.opacity = '0';
       grid.style.transform = 'scale(1)';
       brand.classList.remove('site-brand--animating');
@@ -554,10 +631,27 @@
 
     await waitForFonts();
     await waitForNextFrame();
+    calibrateSvgTextBounds();
+    await waitForNextFrame();
     await runSequence();
   }
 
   launchAnimation();
+
+  let pendingCalibrationFrame = null;
+
+  function scheduleCalibration() {
+    if (pendingCalibrationFrame !== null) {
+      return;
+    }
+
+    pendingCalibrationFrame = window.requestAnimationFrame(() => {
+      pendingCalibrationFrame = null;
+      calibrateSvgTextBounds();
+    });
+  }
+
+  window.addEventListener('resize', scheduleCalibration);
 
   if (reduceMotionQuery) {
     const handlePreferenceChange = (event) => {
