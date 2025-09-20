@@ -1,392 +1,286 @@
-(function () {
-  const { SENTENCES } = window.SITE_CONFIG || {};
-  if (!Array.isArray(SENTENCES) || SENTENCES.length === 0) return;
+class LogoReveal {
+  constructor() {
+    this.logo = document.querySelector('[data-logo]');
+    if (!this.logo) {
+      return;
+    }
 
-  const container = document.getElementById('sentences');
-  if (!container) return;
+    this.grid = this.logo.querySelector('[data-logo-grid]');
+    this.svg = this.logo.querySelector('[data-logo-svg]');
+    this.svgText = this.logo.querySelector('[data-logo-svg-text]');
 
-  const total = SENTENCES.length;
-  const nodes = SENTENCES.map((text, index) => {
-    const sentence = document.createElement('p');
-    sentence.className = 'sentence';
-    sentence.textContent = text;
-    sentence.setAttribute('role', 'listitem');
-    sentence.setAttribute('aria-setsize', String(total));
-    sentence.setAttribute('aria-posinset', String(index + 1));
-    container.appendChild(sentence);
-    return sentence;
-  });
+    if (!this.grid || !this.svg || !this.svgText) {
+      return;
+    }
 
-  const revealed = new Set();
-  let activeIndex = -1;
-  let ticking = false;
+    this.activeAnimations = [];
+    this.runId = null;
+    this.svgConfigured = false;
 
-  applyStates(activeIndex);
+    this.handlePreferenceChange = this.handlePreferenceChange.bind(this);
 
-  function applyStates(currentIndex) {
-    nodes.forEach((node, index) => {
-      const isActive = index === currentIndex;
-      const isPast = index < currentIndex;
-      const hasBeenRevealed = revealed.has(index) || isPast || isActive;
-
-      if (isPast) {
-        revealed.add(index);
-      }
-
-      node.classList.toggle('is-active', isActive);
-      node.classList.toggle('is-past', isPast);
-      node.classList.toggle('is-visible', hasBeenRevealed);
-
-      if (!hasBeenRevealed) {
-        node.classList.remove('is-past', 'is-active');
-      }
-    });
+    this.init();
   }
 
-  function updateActiveSentence() {
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    const revealOffset = viewportHeight * 0.3;
-    const viewportCenter = viewportHeight / 2;
-    let nextIndex = -1;
-    let smallestDistance = Infinity;
+  init() {
+    if (typeof this.grid.animate !== 'function' || typeof this.svgText.animate !== 'function') {
+      this.showStatic();
+      return;
+    }
 
-    nodes.forEach((node, index) => {
-      const rect = node.getBoundingClientRect();
-      const isIntersecting =
-        rect.bottom > -revealOffset && rect.top < viewportHeight + revealOffset;
+    if (typeof window.matchMedia !== 'function') {
+      this.startAnimation();
+      return;
+    }
 
-      if (!isIntersecting) {
+    this.motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    this.handlePreferenceChange(this.motionQuery);
+
+    if (typeof this.motionQuery.addEventListener === 'function') {
+      this.motionQuery.addEventListener('change', this.handlePreferenceChange);
+    } else if (typeof this.motionQuery.addListener === 'function') {
+      this.motionQuery.addListener(this.handlePreferenceChange);
+    }
+  }
+
+  handlePreferenceChange(event) {
+    const prefersReduced = event.matches;
+    if (prefersReduced) {
+      this.stopCurrentRun();
+      this.showStatic();
+    } else {
+      this.startAnimation();
+    }
+  }
+
+  stopCurrentRun() {
+    this.runId = null;
+    if (this.activeAnimations.length) {
+      for (const animation of this.activeAnimations) {
+        try {
+          animation.cancel();
+        } catch (error) {
+          // ignore cancellation issues
+        }
+      }
+      this.activeAnimations.length = 0;
+    }
+
+    this.resetVisualState('idle');
+  }
+
+  resetVisualState(state = 'idle') {
+    this.logo.classList.remove('is-animating');
+    this.logo.dataset.state = state;
+    this.grid.style.opacity = '0';
+    this.svg.style.opacity = '0';
+    this.svgText.style.strokeDasharray = 'none';
+    this.svgText.style.strokeDashoffset = '0';
+    this.svgText.style.fillOpacity = '1';
+    this.svgText.style.strokeOpacity = '0';
+    this.svgConfigured = false;
+  }
+
+  configureSvgMetrics() {
+    if (this.svgConfigured) {
+      return;
+    }
+
+    try {
+      const box = this.svgText.getBBox();
+      if (
+        !box ||
+        !Number.isFinite(box.width) ||
+        !Number.isFinite(box.height)
+      ) {
         return;
       }
 
-      const nodeCenter = rect.top + rect.height / 2;
-      const distance = Math.abs(nodeCenter - viewportCenter);
-
-      if (distance < smallestDistance) {
-        smallestDistance = distance;
-        nextIndex = index;
+      if (box.width === 0 || box.height === 0) {
+        return;
       }
-    });
 
-    if (activeIndex !== nextIndex) {
-      activeIndex = nextIndex;
+      const width = Math.max(Math.ceil(box.width), 1);
+      const height = Math.max(Math.ceil(box.height), 1);
+      const offsetX = -box.x;
+      const offsetY = -box.y;
+
+      this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      this.svgText.setAttribute('x', `${offsetX}`);
+      this.svgText.setAttribute('y', `${offsetY}`);
+      this.svgConfigured = true;
+    } catch (error) {
+      // ignore measurement issues
     }
-
-    applyStates(activeIndex);
   }
 
-  function requestUpdate() {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      ticking = false;
-      updateActiveSentence();
-    });
-  }
-
-  requestUpdate();
-
-  window.addEventListener('scroll', requestUpdate, { passive: true });
-  window.addEventListener('resize', requestUpdate);
-})();
-
-(function () {
-  const toggle = document.querySelector('[data-menu-toggle]');
-  const menu = document.getElementById('site-menu');
-  if (!toggle || !menu) return;
-
-  const menuContainer = menu.querySelector('.site-menu__container');
-  const closeTargets = menu.querySelectorAll('[data-menu-close]');
-  const menuLinks = menu.querySelectorAll('[data-menu-link]');
-  const initialFocus = menu.querySelector('[data-menu-focus]');
-
-  const FOCUSABLE_SELECTORS = [
-    'a[href]',
-    'button:not([disabled])',
-    'input:not([type="hidden"]):not([disabled])',
-    'textarea:not([disabled])',
-    'select:not([disabled])',
-    '[tabindex]:not([tabindex="-1"])'
-  ];
-
-  let lastFocusedElement = null;
-  let hideTimeoutId = null;
-  let pendingTransitionHandler = null;
-
-  function getFocusableElements() {
-    return Array.from(menu.querySelectorAll(FOCUSABLE_SELECTORS.join(','))).filter((element) => {
-      if (element.hasAttribute('disabled')) return false;
-      if (element.getAttribute('aria-hidden') === 'true') return false;
-      if (element.hasAttribute('hidden')) return false;
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-  }
-
-  function setExpandedState(isExpanded) {
-    toggle.setAttribute('aria-expanded', String(isExpanded));
-    toggle.setAttribute('aria-label', isExpanded ? 'Close menu' : 'Open menu');
-  }
-
-  function trapFocus(event) {
-    if (event.key !== 'Tab') return;
-
-    const focusable = getFocusableElements();
-    if (
-      document.body.classList.contains('has-menu-open') &&
-      toggle instanceof HTMLElement &&
-      !toggle.hasAttribute('disabled')
-    ) {
-      const rect = toggle.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        focusable.push(toggle);
-      }
-    }
-    if (focusable.length === 0) {
-      event.preventDefault();
+  trackAnimation(animation) {
+    if (!animation) {
       return;
     }
 
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    if (event.shiftKey) {
-      if (document.activeElement === first || !menu.contains(document.activeElement)) {
-        event.preventDefault();
-        last.focus();
+    this.activeAnimations.push(animation);
+    const remove = () => {
+      const index = this.activeAnimations.indexOf(animation);
+      if (index >= 0) {
+        this.activeAnimations.splice(index, 1);
       }
-    } else if (document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  function handleKeydown(event) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeMenu();
-      return;
-    }
-
-    trapFocus(event);
-  }
-
-  function focusInitialElement() {
-    const candidates = [];
-    if (initialFocus instanceof HTMLElement) {
-      candidates.push(initialFocus);
-    }
-    if (menuContainer instanceof HTMLElement) {
-      candidates.push(menuContainer);
-    }
-    candidates.push(...getFocusableElements());
-
-    const target = candidates.find((element) => typeof element.focus === 'function');
-    if (!target) return;
-
-    requestAnimationFrame(() => {
-      target.focus();
-    });
-  }
-
-  function openMenu() {
-    if (document.body.classList.contains('has-menu-open')) return;
-    if (document.body.classList.contains('is-menu-closing')) return;
-
-    lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    if (hideTimeoutId !== null) {
-      window.clearTimeout(hideTimeoutId);
-      hideTimeoutId = null;
-    }
-
-    if (pendingTransitionHandler) {
-      menu.removeEventListener('transitionend', pendingTransitionHandler);
-      pendingTransitionHandler = null;
-    }
-
-    document.body.classList.remove('is-menu-closing');
-
-    menu.hidden = false;
-    menu.removeAttribute('hidden');
-    menu.setAttribute('aria-hidden', 'false');
-
-    // Ensure the opening opacity transition runs after the element becomes visible.
-    menu.classList.remove('is-open');
-    void menu.offsetWidth;
-
-    menu.classList.add('is-open');
-    document.body.classList.add('has-menu-open');
-
-    setExpandedState(true);
-    focusInitialElement();
-
-    document.addEventListener('keydown', handleKeydown);
-  }
-
-  function closeMenu({ focusToggle = true } = {}) {
-    if (!document.body.classList.contains('has-menu-open')) return;
-    if (document.body.classList.contains('is-menu-closing')) return;
-
-    document.body.classList.add('is-menu-closing');
-    menu.classList.remove('is-open');
-    menu.setAttribute('aria-hidden', 'true');
-    setExpandedState(false);
-    document.removeEventListener('keydown', handleKeydown);
-
-    const finalizeHide = () => {
-      menu.setAttribute('hidden', '');
-      menu.hidden = true;
-      document.body.classList.remove('is-menu-closing');
-      document.body.classList.remove('has-menu-open');
     };
+    animation.addEventListener('finish', remove, { once: true });
+    animation.addEventListener('cancel', remove, { once: true });
+  }
 
-    const prefersReducedMotion =
-      window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReducedMotion) {
-      finalizeHide();
-      hideTimeoutId = null;
-      pendingTransitionHandler = null;
-    } else {
-      const handleTransitionEnd = (event) => {
-        if (event.target !== menu || event.propertyName !== 'opacity') return;
-        menu.removeEventListener('transitionend', handleTransitionEnd);
-        pendingTransitionHandler = null;
-        if (document.body.classList.contains('is-menu-closing')) {
-          finalizeHide();
-        }
-        hideTimeoutId = null;
-      };
-
-      menu.addEventListener('transitionend', handleTransitionEnd);
-      pendingTransitionHandler = handleTransitionEnd;
-      hideTimeoutId = window.setTimeout(() => {
-        if (pendingTransitionHandler) {
-          menu.removeEventListener('transitionend', pendingTransitionHandler);
-          pendingTransitionHandler = null;
-        }
-        if (document.body.classList.contains('is-menu-closing')) {
-          finalizeHide();
-        }
-        hideTimeoutId = null;
-      }, 500);
-    }
-
-    if (focusToggle) {
-      const focusTarget =
-        (lastFocusedElement && document.body.contains(lastFocusedElement)) ? lastFocusedElement : toggle;
-
-      if (focusTarget && typeof focusTarget.focus === 'function') {
-        requestAnimationFrame(() => {
-          focusTarget.focus();
-        });
+  async ensureFontsLoaded(runId) {
+    if (document.fonts && typeof document.fonts.ready === 'object') {
+      try {
+        await document.fonts.ready;
+      } catch (error) {
+        // ignore font readiness issues
       }
     }
+
+    return this.runId === runId;
   }
 
-  toggle.addEventListener('click', () => {
-    if (document.body.classList.contains('has-menu-open')) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  closeTargets.forEach((element) => {
-    element.addEventListener('click', () => {
-      closeMenu();
-    });
-  });
-
-  menuLinks.forEach((link) => {
-    link.addEventListener('click', () => {
-      closeMenu({ focusToggle: false });
-    });
-  });
-})();
-
-(function () {
-  const trigger = document.querySelector('[data-scroll-to-sentences]');
-  const container = document.getElementById('sentences');
-
-  if (!trigger || !container) return;
-
-  function getAbsoluteOffsetTop(element) {
-    let current = element;
-    let offset = 0;
-
-    while (current) {
-      offset += current.offsetTop || 0;
-      current = current.offsetParent;
+  async prepareStroke(runId) {
+    const fontsOk = await this.ensureFontsLoaded(runId);
+    if (!fontsOk || this.runId !== runId) {
+      return 0;
     }
 
-    return offset;
+    this.configureSvgMetrics();
+
+    const textLength = this.svgText.getComputedTextLength();
+    const dashLength = Math.max(Math.ceil(textLength), 1);
+
+    this.svgText.style.strokeDasharray = `${dashLength}`;
+    this.svgText.style.strokeDashoffset = `${dashLength}`;
+    this.svgText.style.fillOpacity = '0';
+    this.svgText.style.strokeOpacity = '1';
+
+    return dashLength;
   }
 
-  function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-  }
+  async startAnimation() {
+    this.stopCurrentRun();
+    const runId = Symbol('logo-run');
+    this.runId = runId;
 
-  function animateScrollTo(top, duration) {
-    const start = window.scrollY || window.pageYOffset || 0;
-    const distance = top - start;
-    if (distance === 0 || duration <= 0) {
-      window.scrollTo(0, top);
+    this.logo.classList.add('is-animating');
+    this.logo.dataset.state = 'animating';
+    this.grid.style.opacity = '0';
+    this.svg.style.opacity = '1';
+
+    const dashLength = await this.prepareStroke(runId);
+    if (!dashLength || this.runId !== runId) {
       return;
     }
 
-    const startTime = performance.now();
+    const gridFadeIn = this.grid.animate(
+      [
+        { opacity: 0 },
+        { opacity: 1 }
+      ],
+      {
+        duration: 600,
+        easing: 'ease-out',
+        fill: 'forwards'
+      }
+    );
+    this.trackAnimation(gridFadeIn);
 
-    const easeInOutCubic = (t) =>
-      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-    function step(now) {
-      const elapsed = now - startTime;
-      const progress = clamp(elapsed / duration, 0, 1);
-      const eased = easeInOutCubic(progress);
-      window.scrollTo(0, Math.round(start + distance * eased));
-      if (progress < 1) {
-        requestAnimationFrame(step);
+    try {
+      await gridFadeIn.finished;
+    } catch (error) {
+      if (this.runId !== runId) {
+        return;
       }
     }
 
-    requestAnimationFrame(step);
-  }
+    if (this.runId !== runId) {
+      return;
+    }
 
-  function scrollToSentences() {
-    const target = container.querySelector('.sentence') || container;
-    const prefersReducedMotion =
-      window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const strokeDraw = this.svgText.animate(
+      [
+        { strokeDashoffset: dashLength },
+        { strokeDashoffset: 0 }
+      ],
+      {
+        duration: 1600,
+        easing: 'cubic-bezier(0.19, 1, 0.22, 1)',
+        fill: 'forwards'
+      }
+    );
+    this.trackAnimation(strokeDraw);
 
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    const targetHeight = target.offsetHeight || target.getBoundingClientRect().height || 0;
-    const documentHeight = Math.max(
-      document.body.scrollHeight,
-      document.documentElement.scrollHeight,
-      document.body.offsetHeight,
-      document.documentElement.offsetHeight,
-      document.body.clientHeight,
-      document.documentElement.clientHeight
+    try {
+      await strokeDraw.finished;
+    } catch (error) {
+      if (this.runId !== runId) {
+        return;
+      }
+    }
+
+    if (this.runId !== runId) {
+      return;
+    }
+
+    const fillIn = this.svgText.animate(
+      [
+        { fillOpacity: 0, strokeOpacity: 1 },
+        { fillOpacity: 1, strokeOpacity: 0 }
+      ],
+      {
+        duration: 520,
+        easing: 'ease-out',
+        fill: 'forwards'
+      }
     );
 
-    const maxScroll = Math.max(0, documentHeight - viewportHeight);
+    const gridFadeOut = this.grid.animate(
+      [
+        { opacity: 1 },
+        { opacity: 0 }
+      ],
+      {
+        duration: 720,
+        easing: 'ease-in',
+        delay: 180,
+        fill: 'forwards'
+      }
+    );
 
-    let destination = getAbsoluteOffsetTop(target);
+    this.trackAnimation(fillIn);
+    this.trackAnimation(gridFadeOut);
 
-    if (targetHeight < viewportHeight) {
-      destination -= (viewportHeight - targetHeight) / 2;
-    }
+    await Promise.allSettled([
+      fillIn.finished,
+      gridFadeOut.finished
+    ]);
 
-    destination = clamp(destination, 0, maxScroll);
-
-    if (prefersReducedMotion) {
-      window.scrollTo({ top: destination, behavior: 'auto' });
+    if (this.runId !== runId) {
       return;
     }
 
-    animateScrollTo(destination, 700);
+    this.logo.classList.remove('is-animating');
+    this.logo.dataset.state = 'breathe';
+    this.svgText.style.strokeDasharray = 'none';
+    this.svgText.style.strokeDashoffset = '0';
+    this.svgText.style.fillOpacity = '1';
+    this.svgText.style.strokeOpacity = '0';
+    this.svg.style.opacity = '0';
+    this.grid.style.opacity = '0';
+    this.runId = null;
   }
 
-  trigger.addEventListener('click', scrollToSentences);
-})();
+  showStatic() {
+    this.resetVisualState('static');
+    this.runId = null;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  new LogoReveal();
+});
