@@ -309,7 +309,7 @@ body.is-menu-closing .site-lockup {
 .site-brand {
   --brand-font-size: clamp(21.6px, 5.4vw, 57.6px);
   --brand-letter-spacing: 0.06em;
-  --brand-stroke-width: 10;
+  --brand-stroke-width: 2.2;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -406,9 +406,9 @@ body.is-menu-closing .site-lockup {
   fill-opacity: 0;
   stroke: var(--brand-stroke);
   stroke-width: var(--brand-stroke-width);
-  stroke-linecap: square;
-  stroke-linejoin: miter;
-  stroke-miterlimit: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-miterlimit: 2;
   paint-order: stroke fill;
   text-rendering: geometricPrecision;
 }

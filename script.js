@@ -490,7 +490,7 @@
       return;
     }
 
-    const padding = Math.max(getStrokeWidthValue() * 0.75, 2);
+    const padding = 0;
     const minX = bbox.x - padding;
     const minY = bbox.y - padding;
     const width = bbox.width + padding * 2;
@@ -538,12 +538,9 @@
     }
 
     try {
-      const computedLength = svgText.getComputedTextLength();
-      const bbox = svgText.getBBox();
-      const width = Math.max(bbox.width, 1);
-      const height = Math.max(bbox.height, 1);
-      const perimeter = 2 * (width + height);
-      return Math.max(computedLength * 2.4, perimeter * 1.25, 1);
+      const computedLength = Math.max(svgText.getComputedTextLength(), 1);
+      const extra = getStrokeWidthValue() * 2;
+      return Math.max(computedLength + extra, 1);
     } catch (error) {
       const rect = brand.getBoundingClientRect();
       const width = rect.width || brand.offsetWidth || 0;
@@ -561,7 +558,7 @@
       syncSvgTextStyle();
 
       const length = getStrokeLength();
-      svgText.style.strokeDasharray = `${length}`;
+      svgText.style.strokeDasharray = `${length} ${length}`;
       svgText.style.strokeDashoffset = `${length}`;
       svgText.style.fillOpacity = '0';
       svgText.style.strokeOpacity = '1';
