@@ -309,7 +309,7 @@ body.is-menu-closing .site-lockup {
 .site-brand {
   --brand-font-size: clamp(21.6px, 5.4vw, 57.6px);
   --brand-letter-spacing: 0.06em;
-  --brand-stroke-width: 0.1em;
+  --brand-stroke-width: 12;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -396,11 +396,7 @@ body.is-menu-closing .site-lockup {
   overflow: visible;
 }
 
-.site-brand__svg-text {
-  font-family: var(--font-brand);
-  font-size: 1em;
-  letter-spacing: var(--brand-letter-spacing);
-  text-transform: uppercase;
+.site-brand__svg-path {
   fill: rgba(255, 255, 255, 0.995);
   fill-opacity: 0;
   stroke: var(--brand-stroke);

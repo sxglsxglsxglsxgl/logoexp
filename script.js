@@ -396,9 +396,9 @@
   if (!brand) return;
 
   const grid = brand.querySelector('.site-brand__grid');
-  const svgText = brand.querySelector('.site-brand__svg-text');
+  const svgPath = brand.querySelector('.site-brand__svg-path');
 
-  if (!grid || !svgText) {
+  if (!grid || !svgPath) {
     return;
   }
 
@@ -408,7 +408,7 @@
       : null;
 
   const supportsWebAnimations =
-    typeof grid.animate === 'function' && typeof svgText.animate === 'function';
+    typeof grid.animate === 'function' && typeof svgPath.animate === 'function';
 
   function waitForFonts() {
     if (document.fonts && typeof document.fonts.ready === 'object') {
@@ -425,35 +425,13 @@
     });
   }
 
-  function estimateTextStrokeLength(element) {
-    if (!element) {
-      return 0;
-    }
-
-    try {
-      const { width, height } = element.getBBox();
-      const charCount = (element.textContent || '').trim().length || 1;
-
-      const perimeter = 2 * (width + height);
-      const charContribution = charCount * (height * 0.65);
-      const fallback = width * 3;
-
-      return Math.max(perimeter * 1.1 + charContribution, fallback, 1);
-    } catch (error) {
-      const rect = element.getBoundingClientRect();
-      const width = rect.width || brand.offsetWidth || 0;
-      const height = rect.height || brand.offsetHeight || 0;
-      return Math.max(2 * (width + height), width * 3, 1);
-    }
-  }
-
   function getAnimations(element) {
     if (!element || typeof element.getAnimations !== 'function') return [];
     return element.getAnimations();
   }
 
   function cancelAnimations() {
-    [grid, svgText].forEach((element) => {
+    [grid, svgPath].forEach((element) => {
       getAnimations(element).forEach((animation) => {
         try {
           animation.cancel();
@@ -468,10 +446,10 @@
     cancelAnimations();
     brand.classList.remove('site-brand--animating');
     brand.classList.add('site-brand--animated');
-    svgText.style.strokeDasharray = 'none';
-    svgText.style.strokeDashoffset = '0';
-    svgText.style.fillOpacity = '1';
-    svgText.style.strokeOpacity = '0';
+    svgPath.style.strokeDasharray = 'none';
+    svgPath.style.strokeDashoffset = '0';
+    svgPath.style.fillOpacity = '1';
+    svgPath.style.strokeOpacity = '0';
     grid.style.opacity = '0';
     grid.style.transform = 'scale(1)';
   }
@@ -483,17 +461,36 @@
     return animation.finished.catch(() => {});
   }
 
+  function getPathLength() {
+    if (!svgPath) {
+      return 1;
+    }
+
+    try {
+      const length = svgPath.getTotalLength();
+      if (!Number.isFinite(length)) {
+        throw new Error('Invalid length');
+      }
+      return Math.max(length, 1);
+    } catch (error) {
+      const rect = svgPath.getBoundingClientRect();
+      const width = rect.width || brand.offsetWidth || 0;
+      const height = rect.height || brand.offsetHeight || 0;
+      return Math.max(2 * (width + height), width * 3, 1);
+    }
+  }
+
   async function runSequence() {
     try {
       cancelAnimations();
       brand.classList.add('site-brand--animating');
       brand.classList.remove('site-brand--animated');
 
-      const length = Math.max(estimateTextStrokeLength(svgText), 1);
-      svgText.style.strokeDasharray = `${length}`;
-      svgText.style.strokeDashoffset = `${length}`;
-      svgText.style.fillOpacity = '0';
-      svgText.style.strokeOpacity = '1';
+      const length = getPathLength();
+      svgPath.style.strokeDasharray = `${length}`;
+      svgPath.style.strokeDashoffset = `${length}`;
+      svgPath.style.fillOpacity = '0';
+      svgPath.style.strokeOpacity = '1';
 
       const gridFadeIn = grid.animate(
         [
@@ -504,7 +501,7 @@
       );
       await whenFinished(gridFadeIn);
 
-      const strokeAnimation = svgText.animate(
+      const strokeAnimation = svgPath.animate(
         [
           { strokeDashoffset: length },
           { strokeDashoffset: 0 }
@@ -513,7 +510,7 @@
       );
       await whenFinished(strokeAnimation);
 
-      const fillAnimation = svgText.animate(
+      const fillAnimation = svgPath.animate(
         [
           { fillOpacity: 0, strokeOpacity: 1 },
           { fillOpacity: 1, strokeOpacity: 0 }
@@ -531,10 +528,10 @@
       );
       await whenFinished(gridFadeOut);
 
-      svgText.style.strokeDasharray = 'none';
-      svgText.style.strokeDashoffset = '0';
-      svgText.style.fillOpacity = '1';
-      svgText.style.strokeOpacity = '0';
+      svgPath.style.strokeDasharray = 'none';
+      svgPath.style.strokeDashoffset = '0';
+      svgPath.style.fillOpacity = '1';
+      svgPath.style.strokeOpacity = '0';
       grid.style.opacity = '0';
       grid.style.transform = 'scale(1)';
       brand.classList.remove('site-brand--animating');
