@@ -390,3 +390,144 @@
 
   trigger.addEventListener('click', scrollToSentences);
 })();
+
+(function () {
+  const brand = document.querySelector('.site-brand');
+  if (!brand) return;
+
+  const grid = brand.querySelector('.site-brand__grid');
+  const svgText = brand.querySelector('.site-brand__svg-text');
+
+  if (!grid || !svgText) {
+    return;
+  }
+
+  const reduceMotionQuery =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
+  const supportsWebAnimations =
+    typeof grid.animate === 'function' && typeof svgText.animate === 'function';
+
+  function getAnimations(element) {
+    if (!element || typeof element.getAnimations !== 'function') return [];
+    return element.getAnimations();
+  }
+
+  function cancelAnimations() {
+    [grid, svgText].forEach((element) => {
+      getAnimations(element).forEach((animation) => {
+        try {
+          animation.cancel();
+        } catch (error) {
+          /* ignore */
+        }
+      });
+    });
+  }
+
+  function applyStaticState() {
+    cancelAnimations();
+    brand.classList.remove('site-brand--animating');
+    brand.classList.add('site-brand--animated');
+    svgText.style.strokeDasharray = 'none';
+    svgText.style.strokeDashoffset = '0';
+    svgText.style.fillOpacity = '1';
+    svgText.style.strokeOpacity = '0';
+    grid.style.opacity = '0';
+  }
+
+  if (!supportsWebAnimations || (reduceMotionQuery && reduceMotionQuery.matches)) {
+    applyStaticState();
+    return;
+  }
+
+  function whenFinished(animation) {
+    if (!animation || typeof animation.finished === 'undefined') {
+      return Promise.resolve();
+    }
+    return animation.finished.catch(() => {});
+  }
+
+  async function runSequence() {
+    try {
+      cancelAnimations();
+      brand.classList.add('site-brand--animating');
+      brand.classList.remove('site-brand--animated');
+
+      const length = Math.max(svgText.getComputedTextLength(), 1);
+      svgText.style.strokeDasharray = `${length}`;
+      svgText.style.strokeDashoffset = `${length}`;
+      svgText.style.fillOpacity = '0';
+      svgText.style.strokeOpacity = '1';
+
+      const gridFadeIn = grid.animate(
+        [
+          { opacity: 0 },
+          { opacity: 0.45 }
+        ],
+        { duration: 600, easing: 'ease-out', fill: 'forwards' }
+      );
+      await whenFinished(gridFadeIn);
+
+      const strokeAnimation = svgText.animate(
+        [
+          { strokeDashoffset: length },
+          { strokeDashoffset: 0 }
+        ],
+        { duration: 1600, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }
+      );
+      await whenFinished(strokeAnimation);
+
+      const fillAnimation = svgText.animate(
+        [
+          { fillOpacity: 0, strokeOpacity: 1 },
+          { fillOpacity: 1, strokeOpacity: 0.1 }
+        ],
+        { duration: 750, easing: 'ease-out', fill: 'forwards' }
+      );
+      await whenFinished(fillAnimation);
+
+      const gridFadeOut = grid.animate(
+        [
+          { opacity: 0.45 },
+          { opacity: 0 }
+        ],
+        { duration: 800, delay: 150, easing: 'ease-in', fill: 'forwards' }
+      );
+      await whenFinished(gridFadeOut);
+
+      svgText.style.strokeDasharray = 'none';
+      svgText.style.strokeDashoffset = '0';
+      svgText.style.fillOpacity = '1';
+      svgText.style.strokeOpacity = '0';
+      grid.style.opacity = '0';
+      brand.classList.remove('site-brand--animating');
+      brand.classList.add('site-brand--animated');
+    } catch (error) {
+      applyStaticState();
+    }
+  }
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(runSequence);
+  });
+
+  if (reduceMotionQuery) {
+    const handlePreferenceChange = (event) => {
+      if (event.matches) {
+        applyStaticState();
+      } else {
+        window.location.reload();
+      }
+    };
+
+    if (typeof reduceMotionQuery.addEventListener === 'function') {
+      reduceMotionQuery.addEventListener('change', handlePreferenceChange);
+    } else if (typeof reduceMotionQuery.addListener === 'function') {
+      reduceMotionQuery.addListener(handlePreferenceChange);
+    }
+  }
+})();
+
