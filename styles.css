@@ -307,6 +307,9 @@ body.is-menu-closing .site-lockup {
 }
 
 .site-brand {
+  --brand-font-size: clamp(21.6px, 5.4vw, 57.6px);
+  --brand-letter-spacing: 0.06em;
+  --brand-stroke-width: 0.1em;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -318,9 +321,9 @@ body.is-menu-closing .site-lockup {
   appearance: none;
   cursor: pointer;
   font-family: var(--font-brand);
-  font-size: clamp(21.6px, 5.4vw, 57.6px);
+  font-size: var(--brand-font-size);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--brand-letter-spacing);
   line-height: 1.05;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.995);
@@ -346,6 +349,7 @@ body.is-menu-closing .site-lockup {
   z-index: 0;
   display: inline-block;
   color: inherit;
+  letter-spacing: var(--brand-letter-spacing);
   transition: opacity 200ms ease;
 }
 
@@ -381,7 +385,7 @@ body.is-menu-closing .site-lockup {
       var(--brand-grid-line) 20px
     );
   opacity: 0;
-  transform: scale(1.12);
+  transform: scale(1.18);
   transform-origin: center;
 }
 
@@ -389,17 +393,18 @@ body.is-menu-closing .site-lockup {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .site-brand__svg-text {
   font-family: var(--font-brand);
-  font-size: 120px;
-  letter-spacing: 0.06em;
+  font-size: 1em;
+  letter-spacing: var(--brand-letter-spacing);
   text-transform: uppercase;
   fill: rgba(255, 255, 255, 0.995);
   fill-opacity: 0;
   stroke: var(--brand-stroke);
-  stroke-width: 2.5;
+  stroke-width: var(--brand-stroke-width);
   stroke-linecap: round;
   stroke-linejoin: round;
   paint-order: stroke fill;

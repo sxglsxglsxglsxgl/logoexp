@@ -410,6 +410,43 @@
   const supportsWebAnimations =
     typeof grid.animate === 'function' && typeof svgText.animate === 'function';
 
+  function waitForFonts() {
+    if (document.fonts && typeof document.fonts.ready === 'object') {
+      return document.fonts.ready.catch(() => {});
+    }
+    return Promise.resolve();
+  }
+
+  function waitForNextFrame() {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  function estimateTextStrokeLength(element) {
+    if (!element) {
+      return 0;
+    }
+
+    try {
+      const { width, height } = element.getBBox();
+      const charCount = (element.textContent || '').trim().length || 1;
+
+      const perimeter = 2 * (width + height);
+      const charContribution = charCount * (height * 0.65);
+      const fallback = width * 3;
+
+      return Math.max(perimeter * 1.1 + charContribution, fallback, 1);
+    } catch (error) {
+      const rect = element.getBoundingClientRect();
+      const width = rect.width || brand.offsetWidth || 0;
+      const height = rect.height || brand.offsetHeight || 0;
+      return Math.max(2 * (width + height), width * 3, 1);
+    }
+  }
+
   function getAnimations(element) {
     if (!element || typeof element.getAnimations !== 'function') return [];
     return element.getAnimations();
@@ -436,11 +473,7 @@
     svgText.style.fillOpacity = '1';
     svgText.style.strokeOpacity = '0';
     grid.style.opacity = '0';
-  }
-
-  if (!supportsWebAnimations || (reduceMotionQuery && reduceMotionQuery.matches)) {
-    applyStaticState();
-    return;
+    grid.style.transform = 'scale(1)';
   }
 
   function whenFinished(animation) {
@@ -456,7 +489,7 @@
       brand.classList.add('site-brand--animating');
       brand.classList.remove('site-brand--animated');
 
-      const length = Math.max(svgText.getComputedTextLength(), 1);
+      const length = Math.max(estimateTextStrokeLength(svgText), 1);
       svgText.style.strokeDasharray = `${length}`;
       svgText.style.strokeDashoffset = `${length}`;
       svgText.style.fillOpacity = '0';
@@ -464,10 +497,10 @@
 
       const gridFadeIn = grid.animate(
         [
-          { opacity: 0 },
-          { opacity: 0.45 }
+          { opacity: 0, transform: 'scale(1.18)' },
+          { opacity: 0.55, transform: 'scale(1)' }
         ],
-        { duration: 600, easing: 'ease-out', fill: 'forwards' }
+        { duration: 650, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', fill: 'forwards' }
       );
       await whenFinished(gridFadeIn);
 
@@ -483,7 +516,7 @@
       const fillAnimation = svgText.animate(
         [
           { fillOpacity: 0, strokeOpacity: 1 },
-          { fillOpacity: 1, strokeOpacity: 0.1 }
+          { fillOpacity: 1, strokeOpacity: 0 }
         ],
         { duration: 750, easing: 'ease-out', fill: 'forwards' }
       );
@@ -491,8 +524,8 @@
 
       const gridFadeOut = grid.animate(
         [
-          { opacity: 0.45 },
-          { opacity: 0 }
+          { opacity: 0.55, transform: 'scale(1)' },
+          { opacity: 0, transform: 'scale(0.94)' }
         ],
         { duration: 800, delay: 150, easing: 'ease-in', fill: 'forwards' }
       );
@@ -503,6 +536,7 @@
       svgText.style.fillOpacity = '1';
       svgText.style.strokeOpacity = '0';
       grid.style.opacity = '0';
+      grid.style.transform = 'scale(1)';
       brand.classList.remove('site-brand--animating');
       brand.classList.add('site-brand--animated');
     } catch (error) {
@@ -510,16 +544,30 @@
     }
   }
 
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(runSequence);
-  });
+  async function launchAnimation() {
+    if (!supportsWebAnimations) {
+      applyStaticState();
+      return;
+    }
+
+    if (reduceMotionQuery && reduceMotionQuery.matches) {
+      applyStaticState();
+      return;
+    }
+
+    await waitForFonts();
+    await waitForNextFrame();
+    await runSequence();
+  }
+
+  launchAnimation();
 
   if (reduceMotionQuery) {
     const handlePreferenceChange = (event) => {
       if (event.matches) {
         applyStaticState();
       } else {
-        window.location.reload();
+        launchAnimation();
       }
     };
 
